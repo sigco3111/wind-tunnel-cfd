@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>풍동 CFD — 격자 볼츠만 D2Q9</title>
+  <style>
+    /* ----------------------------------------------------------------------
+       Wind Tunnel CFD — dark lab-instrument aesthetic
+       Single-file inlined styles. No external assets.
+       ---------------------------------------------------------------------- */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0c;
+      --bg-2: #0f0f13;
+      --panel: #131318;
+      --panel-2: #181820;
+      --border: #26262e;
+      --border-strong: #34343e;
+      --text: #e6e6ea;
+      --text-dim: #a0a0aa;
+      --muted: #6a6a74;
+      --accent: #5eead4;
+      --accent-glow: rgba(94, 234, 212, 0.18);
+      --accent-dim: #14b8a6;
+      --warn: #fb923c;
+      --good: #4ade80;
+      --bad: #f87171;
+      --mono: ui-monospace, "JetBrains Mono", "SF Mono", "D2Coding", "Apple SD Gothic Neo",
+              "Noto Sans KR", "Noto Sans Mono CJK KR", Menlo, Monaco, Consolas, monospace;
+    }
+
+    html, body { height: 100%; }
+    body {
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text);
+      background:
+        radial-gradient(ellipse at 50% 0%, rgba(94,234,212,0.04), transparent 60%),
+        var(--bg);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 28px 20px 40px;
+      overflow-x: hidden;
+    }
+
+    /* Header ---------------------------------------------------------------- */
+    .app-header {
+      width: 100%;
+      max-width: 920px;
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      padding: 4px 4px 14px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 18px;
+    }
+    .app-header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+    .app-header .subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .app-header .fps {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.04em;
+      padding: 3px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--panel);
+    }
+    .app-header .fps .num { color: var(--accent); font-weight: 600; }
+    .app-header .fps .unit { color: var(--muted); margin-left: 4px; }
+
+    /* Language toggle (KR | EN) */
+    .lang-toggle {
+      margin-left: auto;
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      background: var(--panel);
+    }
+    .lang-toggle button {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      padding: 3px 8px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s;
+    }
+    .lang-toggle button:hover { color: var(--accent); }
+    .lang-toggle button.active {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    .app-header .fps { margin-left: 12px; }
+
+    /* Stage ----------------------------------------------------------------- */
+    .stage {
+      width: 100%;
+      max-width: 920px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 18px;
+    }
+    .canvas-frame {
+      position: relative;
+      padding: 8px;
+      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow:
+        0 12px 40px rgba(0,0,0,0.55),
+        0 0 0 1px rgba(94,234,212,0.04),
+        inset 0 1px 0 rgba(255,255,255,0.02);
+    }
+    .canvas-frame::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(94,234,212,0.10), transparent 30%, transparent 70%, rgba(94,234,212,0.06));
+      pointer-events: none;
+      z-index: 0;
+    }
+    canvas#flow {
+      position: relative;
+      z-index: 1;
+      display: block;
+      width: 800px;
+      height: 400px;
+      background: #000;
+      border-radius: 4px;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    /* Controls -------------------------------------------------------------- */
+    .controls {
+      width: 100%;
+      max-width: 920px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      padding: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .controls > .group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px 12px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    .controls .group .group-label {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+    .controls .group .group-label .value {
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      font-weight: 500;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+    .controls .group .group-label .value .dim {
+      color: var(--muted);
+      margin-left: 4px;
+      font-size: 10px;
+    }
+
+    .btn-row { display: flex; gap: 4px; }
+    .btn-row > button { flex: 1 1 0; min-width: 0; padding: 7px 6px; white-space: nowrap; overflow: visible; }
+    /* Field group spans two columns so the long "Vorticity" label fits comfortably. */
+    .controls > .group.field-group { grid-column: span 2; }
+    .controls > .group.field-group .btn-row > button { font-size: 11px; letter-spacing: 0; }
+    button {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      padding: 7px 10px;
+      background: transparent;
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      letter-spacing: 0.02em;
+    }
+    button:hover {
+      color: var(--accent);
+      border-color: var(--accent-dim);
+    }
+    button.active {
+      background: var(--accent);
+      color: #062623;
+      border-color: var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+    button.primary {
+      border-color: var(--accent-dim);
+      color: var(--accent);
+    }
+    button.primary:hover {
+      background: var(--accent);
+      color: #062623;
+    }
+
+    /* Range inputs */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: grab;
+      border: 2px solid var(--bg);
+      box-shadow: 0 0 0 1px var(--accent-dim);
+      transition: transform 0.1s;
+    }
+    input[type="range"]::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.15); }
+    input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: grab;
+      border: 2px solid var(--bg);
+      box-shadow: 0 0 0 1px var(--accent-dim);
+    }
+
+    /* Footer */
+    .footer {
+      width: 100%;
+      max-width: 920px;
+      margin-top: 18px;
+      padding: 12px 16px;
+      color: var(--muted);
+      font-size: 11px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .footer .hint kbd {
+      display: inline-block;
+      padding: 1px 6px;
+      background: var(--panel-2);
+      border: 1px solid var(--border-strong);
+      border-radius: 3px;
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+    .footer .credits { color: var(--muted); }
+    .footer .credits a { color: var(--text-dim); text-decoration: none; border-bottom: 1px dotted var(--border-strong); }
+    .footer .credits a:hover { color: var(--accent); border-color: var(--accent-dim); }
+
+    @media (max-width: 880px) {
+      canvas#flow { width: 100%; height: auto; aspect-ratio: 2 / 1; }
+      .app-header { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <h1 data-i18n="appTitle">풍동 CFD</h1>
+    <span class="subtitle" data-i18n="subtitle">격자 볼츠만 · D2Q9 · 200×100</span>
+    <div class="lang-toggle" role="group" aria-label="Language">
+      <button type="button" data-lang="ko" class="active">KR</button>
+      <button type="button" data-lang="en">EN</button>
+    </div>
+    <span class="fps"><span class="num" id="fpsNum">—</span><span class="unit">fps</span></span>
+  </header>
+
+  <div class="stage">
+    <div class="canvas-frame">
+      <canvas id="flow" width="200" height="100" data-i18n-attr="aria-label:ariaLabel"></canvas>
+    </div>
+  </div>
+
+  <section class="controls" id="controls">
+    <div class="group field-group">
+      <span class="group-label"><span data-i18n="fieldGroupLabel">필드</span> <span class="value" id="fieldLabel">속도</span></span>
+      <div class="btn-row">
+        <button data-field="vel" class="active" data-i18n="fields.vel">속도</button>
+        <button data-field="pressure" data-i18n="fields.pressure">압력</button>
+        <button data-field="vorticity" data-i18n="fields.vorticity">와도</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="group-label"><span data-i18n="inletLabel">유입 속도</span> <span class="value"><span id="uInVal">0.100</span><span class="dim" data-i18n="uInDim">u/u∞</span></span></span>
+      <input type="range" id="uIn" min="0.01" max="0.30" step="0.005" value="0.10" />
+    </div>
+
+    <div class="group">
+      <span class="group-label"><span data-i18n="viscosityLabel">점성 계수 τ</span> <span class="value"><span id="tauVal">0.60</span><span class="dim">ν=<span id="nuVal">0.0333</span></span></span></span>
+      <input type="range" id="tau" min="0.51" max="2.00" step="0.01" value="0.60" />
+    </div>
+
+    <div class="group">
+      <span class="group-label"><span data-i18n="brushLabel">브러시</span> <span class="value"><span id="brushVal">3</span><span class="dim" data-i18n="brushDim">셀</span></span></span>
+      <input type="range" id="brush" min="1" max="10" step="1" value="3" />
+    </div>
+
+    <div class="group">
+      <span class="group-label"><span data-i18n="substepsLabel">부단계</span> <span class="value"><span id="substepsVal">2</span><span class="dim" data-i18n="substepsDim">회/프레임</span></span></span>
+      <input type="range" id="substeps" min="1" max="6" step="1" value="2" />
+    </div>
+
+    <div class="group">
+      <span class="group-label" data-i18n="actionsLabel">동작</span>
+      <div class="btn-row">
+        <button id="playPause" class="primary" data-i18n="pauseBtn">일시정지</button>
+        <button id="clearObs" data-i18n="clearBtn">지우기</button>
+        <button id="reset" class="primary" data-i18n="resetBtn">초기화</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="hint" data-i18n-html="hint"><kbd>드래그</kbd>하여 장애물 그리기 · <kbd>Shift</kbd>+드래그 또는 <kbd>우클릭</kbd>으로 지우기</div>
+    <div class="credits" data-i18n-html="credits"><a href="https://opencode.ai" rel="noopener">OpenCode</a> · <a href="#" rel="noopener">MiniMax M3</a> 모델로 제작 · MIT</div>
+  </footer>
+
+<script>
+"use strict";
+// >>>SOLVER_BEGIN
+// =============================================================================
+// Lattice Boltzmann solver — D2Q9, BGK, single relaxation time.
+// Lattice directions:
+//   i=0: rest      ( 0,  0)   w = 4/9
+//   i=1: east      ( 1,  0)   w = 1/9
+//   i=2: north     ( 0,  1)   w = 1/9
+//   i=3: west      (-1,  0)   w = 1/9
+//   i=4: south     ( 0, -1)   w = 1/9
+//   i=5: NE        ( 1,  1)   w = 1/36
+//   i=6: NW        (-1,  1)   w = 1/36
+//   i=7: SW        (-1, -1)   w = 1/36
+//   i=8: SE        ( 1, -1)   w = 1/36
+// c_s^2 = 1/3
+// Boundaries:
+//   * Top/bottom (y): periodic (channel-wrap)
+//   * Left  (x=0):    Zou–He velocity inlet   (prescribed u_x = uIn, u_y derived)
+//   * Right (x=nx-1): Zou–He pressure outlet  (prescribed rho = rhoOut, u_x/u_y derived)
+//   * Obstacles:      cell-centered bounce-back (dry node)
+// =============================================================================
+
+(function () {
+  const cx = [0, 1, 0, -1, 0,  1, -1, -1,  1];
+  const cy = [0, 0, 1,  0, -1, 1,  1, -1, -1];
+  const w  = [4/9, 1/9, 1/9, 1/9, 1/9, 1/36, 1/36, 1/36, 1/36];
+  const opp = [0, 3, 4, 1, 2, 7, 8, 5, 6];
+
+  const NX = 200, NY = 100, N = NX * NY;
+  const RHO_OUT = 1.0;
+
+  // Mutable params (driven by UI)
+  let uIn = 0.10;
+  let tau = 0.60;
+
+  // State (allocated by alloc())
+  let f, fnew, rho, ux, uy, obstacle;
+
+  function alloc() {
+    f        = new Float32Array(9 * N);
+    fnew     = new Float32Array(9 * N);
+    rho      = new Float32Array(N);
+    ux       = new Float32Array(N);
+    uy       = new Float32Array(N);
+    obstacle = new Uint8Array(N);
+  }
+
+  function equilibrium(i, r, u, v) {
+    const cu = 3 * (cx[i] * u + cy[i] * v);
+    const usq = 1.5 * (u * u + v * v);
+    return w[i] * r * (1 + cu + 0.5 * cu * cu - usq);
+  }
+
+  function initField(addDefaultObstacle) {
+    alloc();
+    if (addDefaultObstacle) {
+      const cx0 = NX / 3, cy0 = NY / 2, r0 = NY / 8;
+      const r02 = r0 * r0;
+      for (let y = 0; y < NY; y++) {
+        for (let x = 0; x < NX; x++) {
+          const dx = x - cx0, dy = y - cy0;
+          if (dx * dx + dy * dy <= r02) obstacle[y * NX + x] = 1;
+        }
+      }
+    }
+    // Initialize distributions to equilibrium (rho=1, u=(uIn, 0)) for fluid cells.
+    // Obstacle cells get equilibrium of (rho=1, u=0) — values are not physically meaningful
+    // but exist so the first streaming step doesn't NaN out.
+    for (let c = 0; c < N; c++) {
+      const c9 = c * 9;
+      const useFlow = !obstacle[c];
+      const u = useFlow ? uIn : 0;
+      for (let i = 0; i < 9; i++) f[c9 + i] = equilibrium(i, 1, u, 0);
+    }
+  }
+
+  function setObstacleCell(c, val) {
+    if (obstacle[c] === val) return;
+    obstacle[c] = val;
+    // Re-seed distributions at this cell so the solver doesn't carry stale state.
+    const c9 = c * 9;
+    if (val) {
+      // Mark obstacle: seed with equilibrium of zero velocity (placeholder)
+      for (let i = 0; i < 9; i++) f[c9 + i] = w[i];
+    } else {
+      // Erase: re-seed with inflow equilibrium so flow re-attaches smoothly
+      for (let i = 0; i < 9; i++) f[c9 + i] = equilibrium(i, 1, uIn, 0);
+    }
+  }
+
+  function step() {
+    // -----------------------------------------------------------------------
+    // 1. Macroscopic: rho, ux, uy from f (fluid cells only — obstacle macro
+    //    isn't physically meaningful and is skipped to avoid divide-by-zero).
+    // -----------------------------------------------------------------------
+    for (let c = 0; c < N; c++) {
+      if (obstacle[c]) continue;
+      const c9 = c * 9;
+      let r = 0, mx = 0, my = 0;
+      for (let i = 0; i < 9; i++) {
+        const fi = f[c9 + i];
+        r  += fi;
+        mx += cx[i] * fi;
+        my += cy[i] * fi;
+      }
+      rho[c] = r;
+      const invR = 1 / r;
+      ux[c] = mx * invR;
+      uy[c] = my * invR;
+    }
+
+    // -----------------------------------------------------------------------
+    // 2. BGK collide in place (fluid cells only).
+    //    f_i <- f_i - (1/tau) * (f_i - f_i^eq)
+    // -----------------------------------------------------------------------
+    const invTau = 1 / tau;
+    for (let c = 0; c < N; c++) {
+      if (obstacle[c]) continue;
+      const c9 = c * 9;
+      const r = rho[c], u = ux[c], v = uy[c];
+      const usq = 1.5 * (u * u + v * v);
+      for (let i = 0; i < 9; i++) {
+        const cu = 3 * (cx[i] * u + cy[i] * v);
+        const feq = w[i] * r * (1 + cu + 0.5 * cu * cu - usq);
+        f[c9 + i] -= (f[c9 + i] - feq) * invTau;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // 3. Streaming — pull scheme. Periodic in y. For out-of-x sources (the
+    //    inlet and outlet columns), preserve the current population so the
+    //    Zou-He BC has valid "knowns" to work with. Reading from obstacle
+    //    sources is fine because obstacles carry post-bounce-back populations
+    //    from the previous step (i.e. the correct reflected values).
+    // -----------------------------------------------------------------------
+    for (let y = 0; y < NY; y++) {
+      const yp = (y + 1) % NY;
+      const ym = (y - 1 + NY) % NY;
+      for (let x = 0; x < NX; x++) {
+        const c9 = (y * NX + x) * 9;
+        // i=0 rest: stay put
+        fnew[c9 + 0] = f[c9 + 0];
+        // i=1 E: source (x-1, y)
+        if (x > 0)     fnew[c9 + 1] = f[(y    * NX + (x - 1)) * 9 + 1];
+        else           fnew[c9 + 1] = f[c9 + 1]; // preserve at inlet column
+        // i=2 N: source (x, y-1)
+        fnew[c9 + 2] = f[(ym   * NX +  x     ) * 9 + 2];
+        // i=3 W: source (x+1, y)
+        if (x < NX - 1) fnew[c9 + 3] = f[(y    * NX + (x + 1)) * 9 + 3];
+        else             fnew[c9 + 3] = f[c9 + 3]; // preserve at outlet column
+        // i=4 S: source (x, y+1)
+        fnew[c9 + 4] = f[(yp   * NX +  x     ) * 9 + 4];
+        // i=5 NE: source (x-1, y-1)
+        if (x > 0)     fnew[c9 + 5] = f[(ym   * NX + (x - 1)) * 9 + 5];
+        else           fnew[c9 + 5] = f[c9 + 5];
+        // i=6 NW: source (x+1, y-1)
+        if (x < NX - 1) fnew[c9 + 6] = f[(ym   * NX + (x + 1)) * 9 + 6];
+        else             fnew[c9 + 6] = f[c9 + 6];
+        // i=7 SW: source (x+1, y+1)
+        if (x < NX - 1) fnew[c9 + 7] = f[(yp   * NX + (x + 1)) * 9 + 7];
+        else             fnew[c9 + 7] = f[c9 + 7];
+        // i=8 SE: source (x-1, y+1)
+        if (x > 0)     fnew[c9 + 8] = f[(yp   * NX + (x - 1)) * 9 + 8];
+        else           fnew[c9 + 8] = f[c9 + 8];
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // 4. Bounce-back at obstacle cells (cell-centered / dry-node).
+    //    After streaming, fnew at an obstacle cell contains the populations
+    //    that streamed IN from fluid neighbors. Swap (i, opp(i)) pairs to
+    //    reflect them back along the same link.
+    // -----------------------------------------------------------------------
+    for (let y = 0; y < NY; y++) {
+      for (let x = 0; x < NX; x++) {
+        const c = y * NX + x;
+        if (!obstacle[c]) continue;
+        const c9 = c * 9;
+        let t;
+        // Pair (1,3), (2,4), (5,7), (6,8). (0 stays put.)
+        t = fnew[c9 + 1]; fnew[c9 + 1] = fnew[c9 + 3]; fnew[c9 + 3] = t;
+        t = fnew[c9 + 2]; fnew[c9 + 2] = fnew[c9 + 4]; fnew[c9 + 4] = t;
+        t = fnew[c9 + 5]; fnew[c9 + 5] = fnew[c9 + 7]; fnew[c9 + 7] = t;
+        t = fnew[c9 + 6]; fnew[c9 + 6] = fnew[c9 + 8]; fnew[c9 + 8] = t;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // 5. Zou–He velocity inlet at x=0. Prescribe u_x = uIn; u_y derived.
+    //    unknowns: f[3] (W), f[6] (NW), f[7] (SW).
+    // -----------------------------------------------------------------------
+    for (let y = 0; y < NY; y++) {
+      const c9 = (y * NX) * 9;
+      const f0 = fnew[c9 + 0], f1 = fnew[c9 + 1], f2 = fnew[c9 + 2];
+      const f4 = fnew[c9 + 4], f5 = fnew[c9 + 5], f8 = fnew[c9 + 8];
+      const r  = (f0 + f2 + f4 + 2 * (f1 + f5 + f8)) / (1 + uIn);
+      const uyIn = (f2 - f4) / r + uIn / 3;
+      fnew[c9 + 3] = f1 - (2 / 3) * r * uIn;
+      fnew[c9 + 6] = f8 - r * (uIn - uyIn) / 6;
+      fnew[c9 + 7] = f5 - r * (uIn + uyIn) / 6;
+    }
+
+    // -----------------------------------------------------------------------
+    // 6. Zou–He pressure outlet at x=NX-1. Prescribe rho = RHO_OUT; u_x/u_y derived.
+    //    unknowns: f[1] (E), f[5] (NE), f[8] (SE).
+    // -----------------------------------------------------------------------
+    for (let y = 0; y < NY; y++) {
+      const c9 = (y * NX + (NX - 1)) * 9;
+      const f0 = fnew[c9 + 0], f2 = fnew[c9 + 2], f3 = fnew[c9 + 3];
+      const f4 = fnew[c9 + 4], f6 = fnew[c9 + 6], f7 = fnew[c9 + 7];
+      const uxOut = 1 - (f0 + f2 + f4 + 2 * (f3 + f6 + f7)) / RHO_OUT;
+      const uyOut = (f2 - f4) / RHO_OUT + uxOut / 3;
+      fnew[c9 + 5] = f7 + RHO_OUT * (uxOut + uyOut) / 6;
+      fnew[c9 + 8] = f6 + RHO_OUT * (uxOut - uyOut) / 6;
+      fnew[c9 + 1] = RHO_OUT - (f0 + f2 + f3 + f4 + f6 + f7) - fnew[c9 + 5] - fnew[c9 + 8];
+    }
+
+    // -----------------------------------------------------------------------
+    // 7. Swap buffers (no copy — just pointer flip via closure).
+    // -----------------------------------------------------------------------
+    const tmp = f; f = fnew; fnew = tmp;
+  }
+
+  // Exports for headless smoke tests (no-op in browser except attaching to globalThis)
+  if (typeof globalThis !== "undefined") {
+    globalThis.__lbm = {
+      initField,
+      step,
+      equilibrium,
+      setObstacleCell,
+      setUIn: (v) => { uIn = v; },
+      setTau: (v) => { tau = v; },
+      getNX: () => NX,
+      getNY: () => NY,
+      getN:  () => N,
+      getF:      () => f,
+      getRho:    () => rho,
+      getUx:     () => ux,
+      getUy:     () => uy,
+      getObstacle: () => obstacle,
+    };
+  }
+})();
+// <<<SOLVER_END
+
+// =============================================================================
+// Renderer — colormap LUTs + ImageData composer
+// =============================================================================
+(function () {
+  // Pull grid dimensions from the solver (it's the only place they live).
+  const NX = globalThis.__lbm.getNX();
+  const NY = globalThis.__lbm.getNY();
+  const N  = NX * NY;
+
+  // Approximate Viridis ramp (dark purple → teal → yellow)
+  const VIRIDIS = [
+    [68, 1, 84], [71, 44, 122], [59, 81, 139], [44, 113, 142],
+    [33, 144, 141], [39, 173, 129], [76, 200, 99], [170, 220, 50],
+    [223, 227, 35], [253, 231, 37]
+  ];
+  // Diverging RdBu for pressure (around 1.0)
+  const RDBU = [
+    [33, 102, 172], [103, 169, 207], [209, 229, 240], [247, 247, 247],
+    [253, 219, 199], [239, 138, 98], [178, 24, 43]
+  ];
+  // Diverging coolwarm for vorticity (negative → positive)
+  const COOLWARM = [
+    [59, 76, 192], [97, 122, 219], [158, 175, 230], [215, 222, 237],
+    [247, 247, 247], [242, 196, 176], [223, 145, 121], [201, 96, 65],
+    [180, 50, 30]
+  ];
+
+  function buildLUT(stops) {
+    const lut = new Uint8ClampedArray(256 * 4);
+    const last = stops.length - 1;
+    for (let i = 0; i < 256; i++) {
+      const t = (i / 255) * last;
+      const i0 = Math.floor(t);
+      const i1 = i0 < last ? i0 + 1 : i0;
+      const f = t - i0;
+      lut[i * 4]     = (stops[i0][0] + (stops[i1][0] - stops[i0][0]) * f) | 0;
+      lut[i * 4 + 1] = (stops[i0][1] + (stops[i1][1] - stops[i0][1]) * f) | 0;
+      lut[i * 4 + 2] = (stops[i0][2] + (stops[i1][2] - stops[i0][2]) * f) | 0;
+      lut[i * 4 + 3] = 255;
+    }
+    return lut;
+  }
+
+  const lutVel     = buildLUT(VIRIDIS);
+  const lutPressure = buildLUT(RDBU);
+  const lutVort    = buildLUT(COOLWARM);
+
+  const canvas = document.getElementById("flow");
+  const ctx = canvas.getContext("2d");
+  const imageData = ctx.createImageData(NX, NY);
+  const data = imageData.data;
+
+  // Field config + auto-scale state
+  let field = "vel";
+  let velMax = 0.15;
+  let velMaxEma = 0.15;
+  let presMean = 1.0;
+  let presMeanEma = 1.0;
+  let presDelta = 0.04;
+  let presDeltaEma = 0.04;
+  let vortMax = 0.05;
+  let vortMaxEma = 0.05;
+  const EMA_ALPHA = 0.04;
+
+  // Vorticity scratch (∂v/∂x − ∂u/∂y)
+  const omegaScratch = new Float32Array(N);
+
+  function updateVorticity() {
+    // Compute ω at every fluid cell via central differences; periodic y.
+    const u = globalThis.__lbm.getUx();
+    const v = globalThis.__lbm.getUy();
+    const obs = globalThis.__lbm.getObstacle();
+    let maxAbs = 0;
+    for (let y = 0; y < NY; y++) {
+      const yp = (y + 1) % NY;
+      const ym = (y - 1 + NY) % NY;
+      for (let x = 0; x < NX; x++) {
+        const c = y * NX + x;
+        // Skip obstacles and a 3-cell buffer at inlet/outlet so central
+        // differences don't read BC populations (would saturate colormap).
+        if (obs[c] || x <= 2 || x >= NX - 3) { omegaScratch[c] = 0; continue; }
+        // Interior central differences in both directions
+        const dvdx = (v[y  * NX + (x + 1)] - v[y  * NX + (x - 1)]) * 0.5;
+        const dudy = (u[yp * NX + x     ] - u[ym * NX + x     ]) * 0.5;
+        const omg = dvdx - dudy;
+        omegaScratch[c] = omg;
+        const a = omg < 0 ? -omg : omg;
+        if (a > maxAbs) maxAbs = a;
+      }
+    }
+    return maxAbs;
+  }
+
+  function render() {
+    const rho = globalThis.__lbm.getRho();
+    const ux  = globalThis.__lbm.getUx();
+    const uy  = globalThis.__lbm.getUy();
+    const obs = globalThis.__lbm.getObstacle();
+    const f   = globalThis.__lbm.getF();
+
+    // ---- Compute current frame's extrema, then EMA -----------------------
+    let velMaxNow = 0;
+    let presMeanNow = 0, presCount = 0;
+    let vortMaxNow = updateVorticity();
+    for (let y = 0; y < NY; y++) {
+      for (let x = 3; x < NX - 3; x++) {
+        const c = y * NX + x;
+        if (obs[c]) continue;
+        const u = ux[c], v = uy[c];
+        const mag2 = u * u + v * v;
+        if (mag2 > velMaxNow) velMaxNow = mag2;
+        presMeanNow += rho[c];
+        presCount++;
+      }
+    }
+    velMaxNow = Math.sqrt(velMaxNow);
+    if (presCount > 0) presMeanNow /= presCount;
+
+    // Compute pressure spread (max abs deviation from mean)
+    let presDeltaNow = 0;
+    for (let y = 0; y < NY; y++) {
+      for (let x = 3; x < NX - 3; x++) {
+        const c = y * NX + x;
+        if (obs[c]) continue;
+        const d = rho[c] - presMeanNow;
+        const a = d < 0 ? -d : d;
+        if (a > presDeltaNow) presDeltaNow = a;
+      }
+    }
+    presDeltaNow = Math.max(presDeltaNow, 1e-4);
+
+    velMaxEma     = velMaxEma    * (1 - EMA_ALPHA) + Math.max(velMaxNow, 1e-4) * EMA_ALPHA;
+    presMeanEma   = presMeanEma  * (1 - EMA_ALPHA) + presMeanNow * EMA_ALPHA;
+    presDeltaEma  = presDeltaEma * (1 - EMA_ALPHA) + presDeltaNow * EMA_ALPHA;
+    vortMaxEma    = vortMaxEma   * (1 - EMA_ALPHA) + Math.max(vortMaxNow, 1e-4) * EMA_ALPHA;
+
+    // ---- Compose ImageData ------------------------------------------------
+    const lut = field === "pressure" ? lutPressure : field === "vorticity" ? lutVort : lutVel;
+    const velInv    = 1 / velMaxEma;
+    const presInv   = 1 / Math.max(presDeltaEma, 1e-4);
+    const vortInv   = 1 / Math.max(vortMaxEma, 1e-4);
+
+    for (let y = 0; y < NY; y++) {
+      for (let x = 0; x < NX; x++) {
+        const c = y * NX + x;
+        const di = c * 4;
+        if (obs[c]) {
+          // Obstacle: dark with subtle teal tint
+          data[di    ] = 22;
+          data[di + 1] = 26;
+          data[di + 2] = 30;
+          data[di + 3] = 255;
+          continue;
+        }
+        // Mask the inlet (x=0..2) and outlet (x=NX-3..NX-1) ghost layers so the BC
+        // boundary doesn't leak artifacts into the diverging colormaps.
+        // The buffer is 3 cells wide because central differences at the
+        // second-to-last interior cell still read BC populations and would
+        // saturate the vorticity map. We use the panel color so the strips
+        // visually merge with the canvas frame, creating a "viewport" effect.
+        if (x <= 2 || x >= NX - 3) {
+          data[di    ] = 19;
+          data[di + 1] = 19;
+          data[di + 2] = 24;
+          data[di + 3] = 255;
+          continue;
+        }
+        let t;
+        if (field === "pressure") {
+          // Diverging around mean: -1 → 0, +1 → 255
+          const r = rho[c];
+          t = (r - presMeanEma) * presInv;
+          t = (t + 1) * 0.5; // [0,1]
+        } else if (field === "vorticity") {
+          const omg = omegaScratch[c];
+          t = omg * vortInv;
+          t = (t + 1) * 0.5;
+        } else {
+          // velocity magnitude
+          const u = ux[c], v = uy[c];
+          const mag = Math.sqrt(u * u + v * v);
+          t = mag * velInv;
+        }
+        // Clamp & LUT
+        if (t < 0) t = 0; else if (t > 1) t = 1;
+        const li = (t * 255) | 0;
+        data[di    ] = lut[li * 4    ];
+        data[di + 1] = lut[li * 4 + 1];
+        data[di + 2] = lut[li * 4 + 2];
+        data[di + 3] = 255;
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  function setField(name) {
+    if (name === "vel" || name === "pressure" || name === "vorticity") {
+      field = name;
+      // Reset EMAs so the new field snaps to current extrema quickly
+      velMaxEma = 0.15; presMeanEma = 1.0; presDeltaEma = 0.04; vortMaxEma = 0.05;
+    }
+  }
+
+  function getField() { return field; }
+
+  function resetRanges() {
+    velMaxEma = 0.15; presMeanEma = 1.0; presDeltaEma = 0.04; vortMaxEma = 0.05;
+  }
+
+  // Expose renderer hooks
+  globalThis.__renderer = { render, setField, getField, updateVorticity, resetRanges };
+})();
+
+// =============================================================================
+// Mouse / pointer input — obstacle painting
+// =============================================================================
+(function () {
+  const NX = globalThis.__lbm.getNX();
+  const NY = globalThis.__lbm.getNY();
+  const canvas = document.getElementById("flow");
+  let brush = 3;
+  let drawing = false;
+  let erasing = false;
+  let lastCell = null;
+
+  function clientToCell(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const gx = Math.floor(((clientX - rect.left) / rect.width) * NX);
+    const gy = Math.floor(((clientY - rect.top)  / rect.height) * NY);
+    return [gx, gy];
+  }
+
+  function paintAt(cx, cy, erase) {
+    const r = brush;
+    const r2 = r * r;
+    const obs = globalThis.__lbm.getObstacle();
+    for (let dy = -r; dy <= r; dy++) {
+      const yy = cy + dy;
+      if (yy < 0 || yy >= NY) continue;
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > r2) continue;
+        const xx = cx + dx;
+        if (xx < 3 || xx >= NX - 3) continue; // reserve 3-cell gutter for inlet/outlet BC buffer
+        const c = yy * NX + xx;
+        globalThis.__lbm.setObstacleCell(c, erase ? 0 : 1);
+      }
+    }
+  }
+
+  function stroke(cx, cy, erase) {
+    // If we have a last cell, draw a thick line to current cell so fast strokes don't gap.
+    if (lastCell && (cx !== lastCell[0] || cy !== lastCell[1])) {
+      const [lx, ly] = lastCell;
+      const dist = Math.hypot(cx - lx, cy - ly);
+      const steps = Math.ceil(dist);
+      for (let s = 1; s <= steps; s++) {
+        const t = s / steps;
+        const ix = Math.round(lx + (cx - lx) * t);
+        const iy = Math.round(ly + (cy - ly) * t);
+        paintAt(ix, iy, erase);
+      }
+    } else {
+      paintAt(cx, cy, erase);
+    }
+    lastCell = [cx, cy];
+  }
+
+  function onPointerDown(e) {
+    e.preventDefault();
+    canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId);
+    drawing = true;
+    erasing = (e.shiftKey || e.button === 2);
+    const [gx, gy] = clientToCell(e.clientX, e.clientY);
+    stroke(gx, gy, erasing);
+  }
+  function onPointerMove(e) {
+    if (!drawing) return;
+    erasing = (e.shiftKey || e.button === 2);
+    const [gx, gy] = clientToCell(e.clientX, e.clientY);
+    stroke(gx, gy, erasing);
+  }
+  function onPointerUp(e) {
+    drawing = false;
+    lastCell = null;
+    canvas.releasePointerCapture && canvas.releasePointerCapture(e.pointerId);
+  }
+
+  canvas.addEventListener("pointerdown", onPointerDown);
+  canvas.addEventListener("pointermove", onPointerMove);
+  canvas.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("pointercancel", onPointerUp);
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+  // Prevent default touch scrolling/zoom on the canvas
+  canvas.addEventListener("touchstart", (e) => e.preventDefault(), { passive: false });
+  canvas.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
+  globalThis.__input = {
+    setBrush: (v) => { brush = v; },
+    getBrush: () => brush,
+    clearObstacles: () => {
+      const obs = globalThis.__lbm.getObstacle();
+      for (let c = 0; c < obs.length; c++) globalThis.__lbm.setObstacleCell(c, 0);
+    },
+  };
+})();
+
+// =============================================================================
+// i18n — minimal Korean / English translation layer.
+// Strings live in a single dict. data-i18n / data-i18n-html / data-i18n-attr
+// attributes on DOM nodes are translated by applyTranslations(lang).
+// Dynamic text (fieldLabel, playPauseBtn) reads from the same dict.
+// =============================================================================
+(function () {
+  const SUPPORTED = ["ko", "en"];
+
+  const t = {
+    ko: {
+      appTitle: "풍동 CFD",
+      subtitle: "격자 볼츠만 · D2Q9 · 200×100",
+      pageTitle: "풍동 CFD — 격자 볼츠만 D2Q9",
+      ariaLabel: "LBM 유동 시뮬레이션",
+      fieldGroupLabel: "필드",
+      fields: { vel: "속도", pressure: "압력", vorticity: "와도" },
+      inletLabel: "유입 속도",
+      uInDim: "u/u∞",
+      viscosityLabel: "점성 계수 τ",
+      brushLabel: "브러시",
+      brushDim: "셀",
+      substepsLabel: "부단계",
+      substepsDim: "회/프레임",
+      actionsLabel: "동작",
+      pauseBtn: "일시정지",
+      playBtn: "재생",
+      clearBtn: "지우기",
+      resetBtn: "초기화",
+      hint: '<kbd>드래그</kbd>하여 장애물 그리기 · <kbd>Shift</kbd>+드래그 또는 <kbd>우클릭</kbd>으로 지우기',
+      credits: '<a href="https://opencode.ai" rel="noopener">OpenCode</a> · <a href="#" rel="noopener">MiniMax M3</a> 모델로 제작 · MIT',
+    },
+    en: {
+      appTitle: "Wind Tunnel CFD",
+      subtitle: "Lattice Boltzmann · D2Q9 · 200×100",
+      pageTitle: "Wind Tunnel CFD — Lattice Boltzmann D2Q9",
+      ariaLabel: "LBM flow simulation",
+      fieldGroupLabel: "Field",
+      fields: { vel: "Velocity", pressure: "Pressure", vorticity: "Vorticity" },
+      inletLabel: "Inlet Velocity",
+      uInDim: "u/u∞",
+      viscosityLabel: "Viscosity τ",
+      brushLabel: "Brush",
+      brushDim: "cells",
+      substepsLabel: "Substeps",
+      substepsDim: "/frame",
+      actionsLabel: "Actions",
+      pauseBtn: "Pause",
+      playBtn: "Play",
+      clearBtn: "Clear",
+      resetBtn: "Reset",
+      hint: '<kbd>Drag</kbd> to draw obstacles · <kbd>Shift</kbd>+drag or <kbd>Right-click</kbd> to erase',
+      credits: 'Built with <a href="https://opencode.ai" rel="noopener">OpenCode</a> · model <a href="#" rel="noopener">MiniMax M3</a> · MIT',
+    },
+  };
+
+  let currentLang = (() => {
+    try {
+      const saved = localStorage.getItem("cfd-lang");
+      if (saved && SUPPORTED.includes(saved)) return saved;
+    } catch (_) {}
+    // Default to Korean for this app (per spec); fallback to EN if KO missing.
+    return t.ko ? "ko" : "en";
+  })();
+
+  // Resolve a dot-path key against the current dict.
+  function resolve(key) {
+    const parts = key.split(".");
+    let v = t[currentLang];
+    for (const p of parts) {
+      if (v == null) return undefined;
+      v = v[p];
+    }
+    return v;
+  }
+
+  // Walk the DOM and update every translatable element for the given lang.
+  function applyTranslations(lang) {
+    if (SUPPORTED.includes(lang)) currentLang = lang;
+    try { localStorage.setItem("cfd-lang", currentLang); } catch (_) {}
+    const dict = t[currentLang];
+
+    // <title>
+    document.title = dict.pageTitle;
+
+    // data-i18n="..." → textContent
+    for (const el of document.querySelectorAll("[data-i18n]")) {
+      const v = resolve(el.getAttribute("data-i18n"));
+      if (typeof v === "string") el.textContent = v;
+    }
+
+    // data-i18n-html="..." → innerHTML (for nodes with <kbd>/<a> markup)
+    for (const el of document.querySelectorAll("[data-i18n-html]")) {
+      const v = resolve(el.getAttribute("data-i18n-html"));
+      if (typeof v === "string") el.innerHTML = v;
+    }
+
+    // data-i18n-attr="attr:key[,attr:key]" → set attribute
+    for (const el of document.querySelectorAll("[data-i18n-attr]")) {
+      const specs = el.getAttribute("data-i18n-attr").split(",");
+      for (const spec of specs) {
+        const [attr, key] = spec.trim().split(":");
+        if (!attr || !key) continue;
+        const v = resolve(key);
+        if (typeof v === "string") el.setAttribute(attr, v);
+      }
+    }
+
+    // Toggle button states
+    for (const b of document.querySelectorAll(".lang-toggle [data-lang]")) {
+      b.classList.toggle("active", b.getAttribute("data-lang") === currentLang);
+    }
+
+    // Notify subscribers (dynamic text — fieldLabel, playPauseBtn)
+    for (const fn of subscribers) fn(currentLang);
+  }
+
+  const subscribers = [];
+  function onChange(fn) { subscribers.push(fn); }
+
+  // Wire toggle clicks
+  function wireToggle() {
+    for (const b of document.querySelectorAll(".lang-toggle [data-lang]")) {
+      b.addEventListener("click", () => {
+        const lang = b.getAttribute("data-lang");
+        if (lang !== currentLang) applyTranslations(lang);
+      });
+    }
+  }
+
+  globalThis.__i18n = {
+    apply: applyTranslations,
+    current: () => currentLang,
+    onChange,
+    wireToggle,
+    t: () => t[currentLang],
+  };
+})();
+
+// =============================================================================
+// UI controls + main rAF loop
+// =============================================================================
+(function () {
+  const fpsNum     = document.getElementById("fpsNum");
+  const fieldLabel = document.getElementById("fieldLabel");
+  const uInEl      = document.getElementById("uIn");
+  const uInVal     = document.getElementById("uInVal");
+  const tauEl      = document.getElementById("tau");
+  const tauVal     = document.getElementById("tauVal");
+  const nuVal      = document.getElementById("nuVal");
+  const brushEl    = document.getElementById("brush");
+  const brushVal   = document.getElementById("brushVal");
+  const substepsEl = document.getElementById("substeps");
+  const substepsVal = document.getElementById("substepsVal");
+  const playPauseBtn = document.getElementById("playPause");
+  const clearBtn   = document.getElementById("clearObs");
+  const resetBtn   = document.getElementById("reset");
+  const fieldButtons = document.querySelectorAll('button[data-field]');
+
+  let playing = true;
+  let substeps = 2;
+  let lastTime = performance.now();
+  let currentField = "vel";
+  let emaFps = 60;
+
+  // Wire field buttons
+  fieldButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      fieldButtons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const f = btn.getAttribute("data-field");
+      currentField = f;
+      globalThis.__renderer.setField(f);
+      fieldLabel.textContent = globalThis.__i18n.t().fields[f];
+    });
+  });
+
+  uInEl.addEventListener("input", () => {
+    const v = parseFloat(uInEl.value);
+    globalThis.__lbm.setUIn(v);
+    uInVal.textContent = v.toFixed(3);
+  });
+
+  tauEl.addEventListener("input", () => {
+    const v = parseFloat(tauEl.value);
+    globalThis.__lbm.setTau(v);
+    tauVal.textContent = v.toFixed(2);
+    nuVal.textContent = ((v - 0.5) / 3).toFixed(4);
+  });
+
+  brushEl.addEventListener("input", () => {
+    const v = parseInt(brushEl.value, 10);
+    globalThis.__input.setBrush(v);
+    brushVal.textContent = v;
+  });
+
+  substepsEl.addEventListener("input", () => {
+    substeps = parseInt(substepsEl.value, 10);
+    substepsVal.textContent = substeps;
+  });
+
+  playPauseBtn.addEventListener("click", () => {
+    playing = !playing;
+    playPauseBtn.textContent = playing ? globalThis.__i18n.t().pauseBtn : globalThis.__i18n.t().playBtn;
+    playPauseBtn.classList.toggle("active", !playing);
+  });
+
+  clearBtn.addEventListener("click", () => {
+    globalThis.__input.clearObstacles();
+  });
+
+  resetBtn.addEventListener("click", () => {
+    globalThis.__lbm.initField(true);
+    globalThis.__renderer.resetRanges();
+  });
+
+  // i18n: keep the dynamic bits in sync with language switches
+  globalThis.__i18n.onChange(() => {
+    fieldLabel.textContent = globalThis.__i18n.t().fields[currentField];
+    playPauseBtn.textContent = playing ? globalThis.__i18n.t().pauseBtn : globalThis.__i18n.t().playBtn;
+  });
+
+  // Boot
+  globalThis.__lbm.initField(true);
+  globalThis.__i18n.wireToggle();
+  globalThis.__i18n.apply(); // applies persisted (or default) language
+
+  function frame(now) {
+    const dt = now - lastTime;
+    lastTime = now;
+    if (dt > 0) {
+      const fps = 1000 / dt;
+      emaFps = emaFps * 0.9 + fps * 0.1;
+      fpsNum.textContent = emaFps.toFixed(0);
+    }
+    if (playing) {
+      for (let s = 0; s < substeps; s++) globalThis.__lbm.step();
+    }
+    globalThis.__renderer.render();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // Surface a couple of niceties on window for debugging
+  globalThis.__debug = { getFps: () => emaFps, isPlaying: () => playing };
+})();
+</script>
+</body>
+</html>
