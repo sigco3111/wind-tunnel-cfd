@@ -6,7 +6,7 @@ D2Q9 격자 볼츠만 솔버가 마우스로 그린 장애물 주변의 유동�
 
 ---
 
-## 🎬 라이브 데모 (Live Demo)
+## 🎬 라이브 데모
 
 > **👉 [https://wind-tunnel-cfd.vercel.app/](https://wind-tunnel-cfd.vercel.app/)** — 브라우저에서 바로 실행 (한국어/영어 토글 지원)
 
@@ -26,7 +26,7 @@ D2Q9 격자 볼츠만 솔버가 마우스로 그린 장애물 주변의 유동�
 
 ---
 
-## 🤖 생성 정보 (Attribution)
+## 🤖 생성 정보
 
 이 프로젝트의 코드는 아래 모델과 프롬프트를 이용해 **자동으로 생성**되었습니다.
 
@@ -53,7 +53,7 @@ Computation can be heavy, so consider keeping the grid resolution modest (e.g., 
 
 ---
 
-## ✨ 주요 특징 (Features)
+## ✨ 주요 특징
 
 - 🌊 **LBM D2Q9 솔버** — BGK 단일 완화 충돌 연산, 불완전 압축성 Navier–Stokes 솔버
 - 🖱️ **마우스 인터랙션** — 드래그로 장애물 그리기 / Shift+드래그로 지우기 / 우클릭 팬
@@ -92,7 +92,7 @@ Computation can be heavy, so consider keeping the grid resolution modest (e.g., 
 
 ---
 
-## 🚀 실행 방법 (Quick Start)
+## 🚀 실행 방법
 
 ### 방법 1: 그냥 브라우저로 열기 (가장 간단)
 ```bash
