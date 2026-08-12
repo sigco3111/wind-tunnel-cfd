@@ -8,7 +8,7 @@ D2Q9 격자 볼츠만 솔버가 마우스로 그린 장애물 주변의 유동�
 
 ## 🎬 라이브 데모
 
-> **👉 [https://wind-tunnel-cfd.vercel.app/](https://wind-tunnel-cfd.vercel.app/)** — 브라우저에서 바로 실행 (한국어/영어 토글 지원)
+> **👉 [https://sigco3111.github.io/wind-tunnel-cfd/](https://sigco3111.github.io/wind-tunnel-cfd/)** — 브라우저에서 바로 실행 (한국어/영어 토글 지원)
 
 | | |
 |---|---|
@@ -35,7 +35,7 @@ D2Q9 격자 볼츠만 솔버가 마우스로 그린 장애물 주변의 유동�
 | **모델** | MiniMax-M3 |
 | **실행 환경** | OpenCode CLI |
 | **저장소** | [`sigco3111/wind-tunnel-cfd`](https://github.com/sigco3111/wind-tunnel-cfd) |
-| **라이브 데모** | [https://wind-tunnel-cfd.vercel.app/](https://wind-tunnel-cfd.vercel.app/) |
+| **라이브 데모** | [https://sigco3111.github.io/wind-tunnel-cfd/](https://sigco3111.github.io/wind-tunnel-cfd/) |
 | **라이선스** | MIT |
 | **의존성** | 없음 (Vanilla JS + Canvas, 단일 HTML) |
 
@@ -108,7 +108,7 @@ python3 -m http.server 8000
 ```
 
 ### 방법 3: 라이브 데모
-👉 **[https://wind-tunnel-cfd.vercel.app/](https://wind-tunnel-cfd.vercel.app/)**
+👉 **[https://sigco3111.github.io/wind-tunnel-cfd/](https://sigco3111.github.io/wind-tunnel-cfd/)**
 
 ---
 
