@@ -12,7 +12,7 @@ D2Q9 격자 볼츠만 솔버가 마우스로 그린 장애물 주변의 유동�
 
 | | |
 |---|---|
-| ![Demo](https://img.shields.io/badge/Live-Demo-7C3AED?style=for-the-badge&logo=vercel&logoColor=white) | [![Repo](https://img.shields.io/badge/GitHub-sigco3111%2Fwind--tunnel--cfd-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/sigco3111/wind-tunnel-cfd) |
+| ![Demo](https://img.shields.io/badge/Live-Demo-222222?style=for-the-badge&logo=githubpages&logoColor=white) | [![Repo](https://img.shields.io/badge/GitHub-sigco3111%2Fwind--tunnel--cfd-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/sigco3111/wind-tunnel-cfd) |
 | ![Status](https://img.shields.io/badge/Status-Live-22C55E?style=flat-square) | ![Stack](https://img.shields.io/badge/Stack-Vanilla_JS-F7DF1E?style=flat-square&logo=javascript&logoColor=black) |
 | ![Method](https://img.shields.io/badge/Solver-LBM_D2Q9-5EEAD4?style=flat-square) | ![Grid](https://img.shields.io/badge/Grid-200x100-FB923C?style=flat-square) |
 | ![License](https://img.shields.io/badge/License-MIT-F1C40F?style=flat-square) | ![Deps](https://img.shields.io/badge/Dependencies-0-9CA3AF?style=flat-square) |
